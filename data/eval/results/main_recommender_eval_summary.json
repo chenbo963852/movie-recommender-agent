@@ -1,0 +1,14 @@
+{
+  "model": "main_recommender_pipeline",
+  "top_k": 10,
+  "seed_limit": 5,
+  "min_rating": 4.0,
+  "eval_users": 1000,
+  "hit_rate_at_10": 0.037,
+  "recall_at_10": 0.0195,
+  "ndcg_at_10": 0.013399,
+  "coverage_at_10": 0.038989,
+  "total_hit_count": 39,
+  "seen_violation_count": 0,
+  "seen_violation_rate": 0.0
+}

@@ -1,0 +1,262 @@
+[
+  {
+    "id": 1,
+    "prompt": "推荐5部2010年之后的高评分科幻惊悚片，不要恐怖片",
+    "expected": {
+      "genre": ["Science Fiction", "Thriller"],
+      "exclude_genre": ["Horror"],
+      "year_from": 2010,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 2,
+    "prompt": "推荐3部适合周末看的高评分喜剧片",
+    "expected": {
+      "genre": ["Comedy"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 3
+    }
+  },
+  {
+    "id": 3,
+    "prompt": "推荐5部近十年的动作犯罪片，不要爱情片",
+    "expected": {
+      "genre": ["Action", "Crime"],
+      "exclude_genre": ["Romance"],
+      "year_from": 2015,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 4,
+    "prompt": "推荐一些经典科幻片，至少1000人评分",
+    "expected": {
+      "genre": ["Science Fiction"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": 1000,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 5,
+    "prompt": "推荐5部2000年之前的高评分剧情片",
+    "expected": {
+      "genre": ["Drama"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": 2000,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 6,
+    "prompt": "推荐4部动画喜剧电影，不要恐怖片",
+    "expected": {
+      "genre": ["Animation", "Comedy"],
+      "exclude_genre": ["Horror"],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 4
+    }
+  },
+  {
+    "id": 7,
+    "prompt": "给我推荐10部高评分动作片",
+    "expected": {
+      "genre": ["Action"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 10
+    }
+  },
+  {
+    "id": 8,
+    "prompt": "推荐3部2018年之后的爱情喜剧片",
+    "expected": {
+      "genre": ["Romance", "Comedy"],
+      "exclude_genre": [],
+      "year_from": 2018,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 3
+    }
+  },
+  {
+    "id": 9,
+    "prompt": "推荐5部犯罪惊悚片，不要动作片",
+    "expected": {
+      "genre": ["Crime", "Thriller"],
+      "exclude_genre": ["Action"],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 10,
+    "prompt": "推荐几部高评分纪录片，至少500人评分",
+    "expected": {
+      "genre": ["Documentary"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": 500,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 11,
+    "prompt": "推荐5部2012年之后的科幻片",
+    "expected": {
+      "genre": ["Science Fiction"],
+      "exclude_genre": [],
+      "year_from": 2012,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 12,
+    "prompt": "推荐3部不要爱情的剧情片",
+    "expected": {
+      "genre": ["Drama"],
+      "exclude_genre": ["Romance"],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 3
+    }
+  },
+  {
+    "id": 13,
+    "prompt": "推荐5部高评分恐怖惊悚片",
+    "expected": {
+      "genre": ["Horror", "Thriller"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 14,
+    "prompt": "推荐4部2005年以前的经典犯罪片",
+    "expected": {
+      "genre": ["Crime"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": 2005,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 4
+    }
+  },
+  {
+    "id": 15,
+    "prompt": "推荐5部热门科幻动作片",
+    "expected": {
+      "genre": ["Science Fiction", "Action"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": 500,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 16,
+    "prompt": "推荐3部高评分动画片",
+    "expected": {
+      "genre": ["Animation"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 3
+    }
+  },
+  {
+    "id": 17,
+    "prompt": "推荐5部2010年之后的喜剧片，不要爱情",
+    "expected": {
+      "genre": ["Comedy"],
+      "exclude_genre": ["Romance"],
+      "year_from": 2010,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 18,
+    "prompt": "推荐5部动作惊悚片，至少1000人评分",
+    "expected": {
+      "genre": ["Action", "Thriller"],
+      "exclude_genre": [],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": 1000,
+      "top_k": 5
+    }
+  },
+  {
+    "id": 19,
+    "prompt": "推荐3部2000年之后的高评分爱情片",
+    "expected": {
+      "genre": ["Romance"],
+      "exclude_genre": [],
+      "year_from": 2000,
+      "year_to": null,
+      "min_vote_average": 7.0,
+      "min_vote_count": null,
+      "top_k": 3
+    }
+  },
+  {
+    "id": 20,
+    "prompt": "推荐5部不要恐怖的科幻片",
+    "expected": {
+      "genre": ["Science Fiction"],
+      "exclude_genre": ["Horror"],
+      "year_from": null,
+      "year_to": null,
+      "min_vote_average": null,
+      "min_vote_count": null,
+      "top_k": 5
+    }
+  }
+]

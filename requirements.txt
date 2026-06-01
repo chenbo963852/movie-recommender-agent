@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+pydantic
+
+qdrant-client
+sentence-transformers
+rank-bm25
+
+pandas
+numpy
+pyarrow
+scikit-learn
+
+torch
+transformers
+tqdm
+requests

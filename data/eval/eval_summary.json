@@ -1,0 +1,22 @@
+{
+  "random_seed": 42,
+  "liked_rating_threshold": 4.0,
+  "min_user_ratings": 20,
+  "min_user_liked": 5,
+  "test_liked_per_user": 2,
+  "max_eval_users": 1000,
+  "selected_eval_users": 1000,
+  "valid_eval_users_with_test": 1000,
+  "train_rating_count": 26022289,
+  "test_rating_count": 2000,
+  "train_user_count": 270896,
+  "test_user_count": 1000,
+  "train_movie_count": 45115,
+  "test_movie_count": 1204,
+  "has_timestamp": true,
+  "outputs": {
+    "train": "D:\\pycharm\\project_demo\\qdrant_search_demo\\data\\eval\\ratings_train.csv",
+    "test": "D:\\pycharm\\project_demo\\qdrant_search_demo\\data\\eval\\ratings_test.csv",
+    "ground_truth": "D:\\pycharm\\project_demo\\qdrant_search_demo\\data\\eval\\test_ground_truth.json"
+  }
+}

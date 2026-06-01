@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Cache
+cache/
+*.log
+logs/
+
+# Local vector database
+qdrant_data/
+app/qdrant_data/
+
+# Local models
+local_models/
+
+# Large datasets
+movielens-32m/
+TMDB/
+data/raw/
+data/processed/
+data/*.csv
+data/*.parquet
+data/*.zip
+
+# Evaluation intermediate data
+data/eval/processed/
+data/eval/*.csv
+data/eval/test_ground_truth.json
+
+# Parquet files anywhere under data
+data/**/*.parquet
+
+# Keep small sample files only if needed
+# data/documents.json  可以先保留，也可以后面看大小决定
