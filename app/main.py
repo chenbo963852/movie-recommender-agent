@@ -1,15 +1,24 @@
 import json
-from fastapi import FastAPI, Query, HTTPException
-from app.services.bm25_service import BM25Service
 import time
 import logging
 import re
 
+from fastapi import FastAPI, Query, HTTPException
+from pydantic import BaseModel
 
-
-
+from app.services.bm25_service import BM25Service
 from app.services.embedding_service import EmbeddingService
 from app.services.qdrant_service import QdrantService
+from app.services.ratings_service import RatingsService
+from app.services.retrieval_service import RetrievalService
+from app.services.movie_rating_stats_service import MovieRatingStatsService
+from app.services.user_profile_service import UserProfileService
+from app.services.user_seen_movies_service import UserSeenMoviesService
+from app.services.intent_parser_service import IntentParserService
+from app.services.agent_recommendation_service import AgentRecommendationService
+from app.services.local_llm_service import LocalLLMService
+from app.services.recommendation_service import UserRecommendationService
+from app.evaluation import evaluate_recommendation, evaluate_batch_users
 from app.schemas import (
     DocumentRequest,
     DocumentBatchRequest,
@@ -18,27 +27,6 @@ from app.schemas import (
     AgentUserRecommendRequest,
     LocalAgentUserRecommendRequest,
 )
-from app.services.ratings_service import RatingsService
-from app.evaluation import evaluate_recommendation, evaluate_batch_users
-from app.services.retrieval_service import RetrievalService
-from app.services.movie_rating_stats_service import MovieRatingStatsService
-from app.services.user_profile_service import UserProfileService
-from app.services.user_seen_movies_service import UserSeenMoviesService
-from app.services.intent_parser_service import IntentParserService
-from app.services.agent_recommendation_service import AgentRecommendationService
-from app.services.local_llm_service import LocalLLMService
-from pydantic import BaseModel
-from app.services.recommendation_service import UserRecommendationService
-
-
-
-
-
-
-
-
-
-
 
 app = FastAPI()
 logging.basicConfig(
@@ -47,7 +35,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
 
 embedding_service = EmbeddingService()
 qdrant_service = QdrantService()
@@ -58,9 +45,6 @@ user_profile_service = UserProfileService()
 user_seen_movies_service = UserSeenMoviesService()
 intent_parser_service = IntentParserService()
 local_llm_service = LocalLLMService()
-
-
-
 
 retrieval_service = RetrievalService(
     embedding_service=embedding_service,
@@ -84,37 +68,26 @@ user_recommendation_service = UserRecommendationService(
 )
 
 
-
 class LocalAgentRecommendRequest(BaseModel):
     prompt: str
 
 
-
-def init_data():
-    with open("data/documents.json", "r", encoding="utf-8") as f:
-        docs = json.load(f)
-
-    qdrant_service.recreate_collection(vector_size=768)
-
-    texts = [doc["text"] for doc in docs]
-    vectors = embedding_service.encode_batch(texts)
-    qdrant_service.add_documents(docs, vectors)
-
-    bm25_service.build_index(docs)
-
 def load_documents_from_json():
-        with open("data/documents.json", "r", encoding="utf-8") as f:
-            return json.load(f)
+    with open("data/documents.json", "r", encoding="utf-8") as f:
+        return json.load(f)
+
 
 def save_documents_to_json(docs: list[dict]):
-        with open("data/documents.json", "w", encoding="utf-8") as f:
-            json.dump(docs, f, ensure_ascii=False, indent=2)
+    with open("data/documents.json", "w", encoding="utf-8") as f:
+        json.dump(docs, f, ensure_ascii=False, indent=2)
+
 
 def document_id_exists(doc_id: int, docs: list[dict]) -> bool:
     for doc in docs:
         if doc["id"] == doc_id:
             return True
     return False
+
 
 def rebuild_bm25_index():
     docs = load_documents_from_json()
@@ -127,178 +100,6 @@ def extract_year(title: str) -> int | None:
     if match:
         return int(match.group(1))
     return None
-
-def get_user_seed_movies(
-    user_id: int,
-    min_rating: float = 4.0,
-    max_seeds: int = 3,
-    excluded_movie_ids: set[int] | None = None
-):
-    ratings = ratings_service.get_user_ratings(user_id)
-
-    high_rated = [
-        item for item in ratings
-        if item["rating"] >= min_rating
-        and (excluded_movie_ids is None or item["movie_id"] not in excluded_movie_ids)
-    ]
-    high_rated.sort(key=lambda x: x["rating"], reverse=True)
-
-    return high_rated[:max_seeds]
-
-
-def get_user_watched_movie_ids(
-    user_id: int,
-    excluded_movie_ids: set[int] | None = None
-):
-    ratings = ratings_service.get_user_ratings(user_id)
-    watched = {item["movie_id"] for item in ratings}
-
-    if excluded_movie_ids:
-        watched -= excluded_movie_ids
-
-    return watched
-
-def recommend_for_user_core(
-    user_id: int,
-    top_k: int = 20,
-    min_rating: float = 4.0,
-    seed_limit: int = 10,
-    excluded_movie_ids: set[int] | None = None,
-    exclude_watched: bool = True
-):
-    if not ratings_service.is_loaded():
-        raise ValueError("Ratings data not loaded")
-
-    user_ratings = ratings_service.get_user_ratings(user_id)
-    if not user_ratings:
-        raise ValueError(f"User id {user_id} not found")
-
-    seed_movies = get_user_seed_movies(
-        user_id=user_id,
-        min_rating=min_rating,
-        max_seeds=seed_limit,
-        excluded_movie_ids=excluded_movie_ids
-    )
-
-    if not seed_movies:
-        return {
-            "user_id": user_id,
-            "seed_movies": [],
-            "results": []
-        }
-
-    seed_movie_details = []
-    for seed in seed_movies:
-        seed_movie = qdrant_service.get_document_by_id(seed["movie_id"])
-        if seed_movie is not None:
-            seed_movie_details.append({
-                "movie_id": seed["movie_id"],
-                "title": seed_movie.payload.get("text"),
-                "genres": seed_movie.payload.get("category"),
-                "rating": seed["rating"]
-            })
-
-    watched_movie_ids = get_user_watched_movie_ids(
-        user_id=user_id,
-        excluded_movie_ids=excluded_movie_ids
-    )
-
-    candidate_map = {}
-
-    for seed in seed_movies:
-        seed_movie_id = seed["movie_id"]
-        seed_rating = seed["rating"]
-
-        target_movie = qdrant_service.get_document_by_id(seed_movie_id)
-        if target_movie is None:
-            continue
-
-        target_text = target_movie.payload.get("text", "")
-        target_category = target_movie.payload.get("category", "")
-
-        seed_title = target_text
-        seed_genres = target_category
-
-        target_genres = set(target_category.lower().split())
-        target_year = extract_year(target_text)
-
-        query_vector = embedding_service.encode(target_text)
-        candidates = qdrant_service.search(query_vector, top_k=300)
-
-        for point in candidates:
-            candidate_id = point.id
-
-            # 屏蔽种子自身
-            if candidate_id == seed_movie_id:
-                continue
-            # 屏蔽自定义排除的电影 + 已看电影
-            if exclude_watched:
-                if (excluded_movie_ids and candidate_id in excluded_movie_ids) or candidate_id in watched_movie_ids:
-                    continue
-
-            candidate_title = point.payload.get("text", "")
-            candidate_genres_text = point.payload.get("category", "")
-            candidate_genres = set(candidate_genres_text.lower().split())
-
-            shared_genres = target_genres & candidate_genres
-            genre_overlap_count = len(shared_genres)
-            genre_penalty = 1.0 if genre_overlap_count > 0 else 0.2
-
-            vector_score = float(point.score)
-
-            candidate_year = extract_year(candidate_title)
-            year_bonus = 0.0
-            year_gap = None
-
-            if target_year is not None and candidate_year is not None:
-                year_gap = abs(target_year - candidate_year)
-                if year_gap <= 3:
-                    year_bonus = 1.0
-                elif year_gap <= 10:
-                    year_bonus = 0.5
-                elif year_gap <= 20:
-                    year_bonus = 0.2
-
-            # 优化后打分公式
-            final_score = (
-                0.45 * vector_score
-                + 0.35 * genre_overlap_count
-                + 0.15 * year_bonus
-                + 0.05 * seed_rating
-                + 0.05 * (1.0 if seed_rating >= 4.5 else 0.0)
-            ) * genre_penalty
-
-            if candidate_id not in candidate_map or final_score > candidate_map[candidate_id]["final_score"]:
-                candidate_map[candidate_id] = {
-                    "id": candidate_id,
-                    "title": candidate_title,
-                    "genres": candidate_genres_text,
-                    "vector_score": vector_score,
-                    "genre_overlap_count": genre_overlap_count,
-                    "shared_genres": sorted(shared_genres),
-                    "candidate_year": candidate_year,
-                    "year_gap": year_gap,
-                    "year_bonus": year_bonus,
-                    "source_seed_movie_id": seed_movie_id,
-                    "source_seed_title": seed_title,
-                    "source_seed_genres": seed_genres,
-                    "source_seed_rating": seed_rating,
-                    "final_score": float(final_score)
-                }
-
-    results = list(candidate_map.values())
-    results.sort(key=lambda x: x["final_score"], reverse=True)
-    final_results = results[:top_k]
-
-    return {
-        "user_id": user_id,
-        "seed_movies": seed_movie_details,
-        "results": final_results
-    }
-
-
-
-
 
 
 @app.on_event("startup")
@@ -319,12 +120,9 @@ def startup():
     local_llm_service.load_model()
 
 
-
-
 @app.get("/")
 def root():
     return {"message": "Qdrant local demo is running"}
-
 
 
 def search_movies_core(
@@ -349,7 +147,6 @@ def search_movies_core(
         min_vote_average=min_vote_average,
         min_vote_count=min_vote_count,
     )
-
 
 
 @app.get("/search")
@@ -389,10 +186,6 @@ def recommend_structured(req: StructuredRecommendRequest):
         min_vote_average=req.min_vote_average,
         min_vote_count=req.min_vote_count
     )
-
-
-
-
 
 
 @app.post("/documents")
@@ -496,7 +289,6 @@ def add_documents_batch(batch: DocumentBatchRequest):
         "message": "batch insert success",
         "count": len(docs_to_add)
     }
-
 
 
 @app.get("/documents")
@@ -628,8 +420,6 @@ def recommend_similar(
         "results": final_results,
         "elapsed_time_seconds": round(elapsed_time, 4)
     }
-
-
 
 
 @app.get("/movies/popular")
@@ -878,9 +668,11 @@ def user_recommend(
         "results": final_results,
     }
 
+
 @app.post("/agent/recommend")
 def agent_recommend(req: AgentRecommendRequest):
     return agent_recommendation_service.recommend(req.message)
+
 
 @app.post("/agent/user-recommend")
 def agent_user_recommend(req: AgentUserRecommendRequest):
@@ -889,36 +681,35 @@ def agent_user_recommend(req: AgentUserRecommendRequest):
         message=req.message,
     )
 
+
 @app.get("/llm/test")
 def test_local_llm(prompt: str):
     response = local_llm_service.chat(prompt)
-
     return {
         "prompt": prompt,
         "response": response
     }
 
+
 @app.post("/agent/recommend/local")
 def local_agent_recommend(req: LocalAgentRecommendRequest):
     params = local_llm_service.extract_search_params(req.prompt)
-
     return agent_recommendation_service.recommend_with_parsed_intent(
         message=req.prompt,
         parsed_intent=params,
         agent_type="local_llm_agent",
     )
 
+
 @app.post("/agent/recommend/local/user")
 def local_agent_user_recommend(req: LocalAgentUserRecommendRequest):
     params = local_llm_service.extract_search_params(req.prompt)
-
     return agent_recommendation_service.recommend_for_user_with_parsed_intent(
         user_id=req.user_id,
         message=req.prompt,
         parsed_intent=params,
         agent_type="local_llm_personalized_agent",
     )
-
 
 
 # -------------------------- 评估接口 --------------------------
@@ -933,6 +724,7 @@ def evaluate_user_recommend(
         return evaluate_recommendation(
             ratings_service=ratings_service,
             qdrant_service=qdrant_service,
+            embedding_service=embedding_service,
             recommend_for_user_core=user_recommendation_service.recommend_for_user,
             user_id=user_id,
             top_k=top_k,
@@ -958,14 +750,10 @@ def evaluate_batch_recommend(
     return evaluate_batch_users(
         ratings_service=ratings_service,
         qdrant_service=qdrant_service,
+        embedding_service=embedding_service,
         recommend_for_user_core=user_recommendation_service.recommend_for_user,
         user_ids=uid_list,
         top_k=top_k,
         min_rating=min_rating,
         seed_limit=seed_limit
     )
-
-
-
-
-

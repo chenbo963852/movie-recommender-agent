@@ -42,8 +42,10 @@ data/*.zip
 
 # Evaluation intermediate data
 data/eval/processed/
+data/eval/results/
 data/eval/*.csv
 data/eval/test_ground_truth.json
+data/eval/eval_summary.json
 
 # Parquet files anywhere under data
 data/**/*.parquet
