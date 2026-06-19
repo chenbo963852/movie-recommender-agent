@@ -3,6 +3,8 @@ import pickle
 import hashlib
 import re
 from pathlib import Path
+
+import jieba
 from rank_bm25 import BM25Okapi
 
 
@@ -163,7 +165,21 @@ class BM25Service:
     def _tokenize(self, text: str) -> list[str]:
         if not text:
             return []
-        return re.findall(r"[a-zA-Z0-9]+", text.lower()) # 连续的英文字母或数字进行分词
+
+        # 英文/数字：保留原有正则
+        english_tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
+
+        # 中文：用 jieba 分词，过滤纯空白和标点
+        chinese_tokens = [
+            token.strip().lower()
+            for token in jieba.cut(text)
+            if token.strip() and re.search(r"[一-鿿]", token)
+        ]
+
+        # 合并且保持顺序（先英文再中文，BM25 不依赖顺序）
+        tokens = english_tokens + chinese_tokens
+
+        return tokens
 
     def _field_to_text(self, value) -> str:
         if value is None:

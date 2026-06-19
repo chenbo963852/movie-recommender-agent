@@ -13,6 +13,8 @@ from app.services.movie_rating_stats_service import MovieRatingStatsService
 from app.services.retrieval_service import RetrievalService
 from app.services.intent_parser_service import IntentParserService
 from app.services.agent_recommendation_service import AgentRecommendationService
+from app.services.llm_service import LLMService
+from config import llm_config
 
 
 TEST_CASES_PATH = PROJECT_ROOT / "data/eval/agent_test_cases.json"
@@ -20,6 +22,7 @@ RESULTS_DIR = PROJECT_ROOT / "data/eval/results"
 
 OUTPUT_SUMMARY = RESULTS_DIR / "agent_eval_summary.json"
 OUTPUT_DETAILS = RESULTS_DIR / "agent_eval_details.json"
+OUTPUT_COMPARISON = RESULTS_DIR / "agent_eval_comparison.json"  # LLM vs Rule 对比
 
 
 def normalize_list(value):
@@ -180,90 +183,92 @@ def main():
 
     intent_parser_service = IntentParserService()
 
-    agent_service = AgentRecommendationService(
-        intent_parser_service=intent_parser_service,
+    # 初始化 LLM 服务
+    llm_service = LLMService(backend=llm_config.backend, config=llm_config.to_dict())
+
+    # 规则 Agent（保持原有逻辑）
+    rule_agent_service = AgentRecommendationService(
+        llm_service=llm_service,
         retrieval_service=retrieval_service,
+        intent_parser_service=intent_parser_service,
+    )
+
+    # LLM Agent（使用 Agent 循环 + RAG）
+    llm_agent_service = AgentRecommendationService(
+        llm_service=llm_service,
+        retrieval_service=retrieval_service,
+        intent_parser_service=intent_parser_service,
     )
 
     total = len(test_cases)
 
     field_names = [
-        "genre",
-        "exclude_genre",
-        "year_from",
-        "year_to",
-        "min_vote_average",
-        "min_vote_count",
-        "top_k",
+        "genre", "exclude_genre", "year_from", "year_to",
+        "min_vote_average", "min_vote_count", "top_k",
     ]
 
-    field_correct = {field: 0 for field in field_names}
+    def evaluate_one_agent(agent_service, agent_label: str, use_llm: bool):
+        """评估单个 Agent。"""
+        field_correct = {field: 0 for field in field_names}
+        exact_param_correct = 0
+        non_empty_count = 0
+        fallback_used_count = 0
+        fallback_success_count = 0
+        total_result_count = 0
+        satisfied_result_count = 0
+        rag_generated_count = 0
 
-    exact_param_correct = 0
+        details = []
 
-    non_empty_count = 0
-    fallback_used_count = 0
-    fallback_success_count = 0
+        for case in test_cases:
+            case_id = case["id"]
+            prompt = case["prompt"]
+            expected = case["expected"]
 
-    total_result_count = 0
-    satisfied_result_count = 0
+            print(f"[{agent_label}] Evaluating case {case_id}: {prompt}")
 
-    details = []
-
-    for case in test_cases:
-        case_id = case["id"]
-        prompt = case["prompt"]
-        expected = case["expected"]
-
-        print(f"Evaluating case {case_id}: {prompt}")
-
-        response = agent_service.recommend(prompt)
-
-        parsed = response.get("parsed_intent") or {}
-        results = response.get("results") or []
-
-        field_result = {}
-
-        for field in field_names:
-            if field in ["genre", "exclude_genre"]:
-                ok = list_match(
-                    parsed.get(field),
-                    expected.get(field),
-                )
+            if use_llm:
+                try:
+                    response = agent_service.recommend_llm(prompt)
+                except Exception as e:
+                    print(f"  LLM agent failed: {e}, falling back to rule")
+                    response = agent_service.recommend(prompt)
             else:
-                ok = scalar_match(
-                    parsed.get(field),
-                    expected.get(field),
-                )
+                response = agent_service.recommend(prompt)
 
-            field_result[field] = ok
+            parsed = response.get("parsed_intent") or {}
+            results = response.get("results") or []
 
-            if ok:
-                field_correct[field] += 1
+            # 检查 RAG
+            if response.get("rag_generated"):
+                rag_generated_count += 1
 
-        if all(field_result.values()):
-            exact_param_correct += 1
+            field_result = {}
+            for field in field_names:
+                if field in ["genre", "exclude_genre"]:
+                    ok = list_match(parsed.get(field), expected.get(field))
+                else:
+                    ok = scalar_match(parsed.get(field), expected.get(field))
+                field_result[field] = ok
+                if ok:
+                    field_correct[field] += 1
 
-        if results:
-            non_empty_count += 1
+            if all(field_result.values()):
+                exact_param_correct += 1
 
-        fallback_used = bool(response.get("fallback_used"))
-        if fallback_used:
-            fallback_used_count += 1
+            if results:
+                non_empty_count += 1
 
-        if fallback_used and results:
-            fallback_success_count += 1
+            fallback_used = bool(response.get("fallback_used"))
+            if fallback_used:
+                fallback_used_count += 1
+            if fallback_used and results:
+                fallback_success_count += 1
 
-        result_checks = []
-
-        for movie in results:
-            ok = result_constraint_satisfaction(
-                movie,
-                expected,
-            )
-
-            result_checks.append(
-                {
+            result_checks = []
+            for movie in results:
+                ok = result_constraint_satisfaction(movie, expected)
+                result_checks.append({
                     "id": movie.get("id"),
                     "title": movie.get("title"),
                     "genres": movie.get("genres"),
@@ -272,16 +277,12 @@ def main():
                     "vote_count": movie.get("vote_count"),
                     "satisfies_constraints": ok,
                     "agent_strategy": movie.get("agent_strategy"),
-                }
-            )
+                })
+                total_result_count += 1
+                if ok:
+                    satisfied_result_count += 1
 
-            total_result_count += 1
-
-            if ok:
-                satisfied_result_count += 1
-
-        details.append(
-            {
+            details.append({
                 "id": case_id,
                 "prompt": prompt,
                 "expected": expected,
@@ -289,50 +290,80 @@ def main():
                 "field_correct": field_result,
                 "exact_param_match": all(field_result.values()),
                 "fallback_used": fallback_used,
+                "rag_generated": response.get("rag_generated", False),
+                "llm_driven_loop": response.get("llm_driven_loop", False),
                 "result_count": len(results),
                 "constraint_satisfaction_count": sum(
-                    1 for item in result_checks
-                    if item["satisfies_constraints"]
+                    1 for item in result_checks if item["satisfies_constraints"]
                 ),
                 "results": result_checks,
-            }
-        )
+            })
 
-    summary = {
-        "test_case_count": total,
-        "exact_param_accuracy": round(exact_param_correct / total, 4),
-        "field_accuracy": {
-            field: round(field_correct[field] / total, 4)
-            for field in field_names
+        return {
+            "agent_label": agent_label,
+            "test_case_count": total,
+            "exact_param_accuracy": round(exact_param_correct / total, 4),
+            "field_accuracy": {
+                field: round(field_correct[field] / total, 4) for field in field_names
+            },
+            "non_empty_result_rate": round(non_empty_count / total, 4),
+            "fallback_used_rate": round(fallback_used_count / total, 4),
+            "fallback_success_rate": (
+                round(fallback_success_count / fallback_used_count, 4)
+                if fallback_used_count else 0.0
+            ),
+            "constraint_satisfaction_rate": (
+                round(satisfied_result_count / total_result_count, 4)
+                if total_result_count else 0.0
+            ),
+            "rag_generated_rate": round(rag_generated_count / total, 4),
+            "details": details,
+        }
+
+    # ─── 评估规则 Agent ───
+    print("\n=== Evaluating Rule Agent ===\n")
+    rule_summary = evaluate_one_agent(rule_agent_service, "rule_agent", use_llm=False)
+
+    # ─── 评估 LLM Agent ───
+    print("\n=== Evaluating LLM Agent ===\n")
+    llm_summary = evaluate_one_agent(llm_agent_service, "llm_agent", use_llm=True)
+
+    # ─── 对比 ───
+    comparison = {
+        "rule_agent": {k: v for k, v in rule_summary.items() if k != "details"},
+        "llm_agent": {k: v for k, v in llm_summary.items() if k != "details"},
+        "delta": {
+            "exact_param_accuracy": round(
+                llm_summary["exact_param_accuracy"] - rule_summary["exact_param_accuracy"], 4
+            ),
+            "non_empty_result_rate": round(
+                llm_summary["non_empty_result_rate"] - rule_summary["non_empty_result_rate"], 4
+            ),
+            "constraint_satisfaction_rate": round(
+                llm_summary["constraint_satisfaction_rate"] - rule_summary["constraint_satisfaction_rate"], 4
+            ),
+            "rag_enabled": llm_summary["rag_generated_rate"] > 0,
         },
-        "non_empty_result_rate": round(non_empty_count / total, 4),
-        "fallback_used_rate": round(fallback_used_count / total, 4),
-        "fallback_success_rate": round(
-            fallback_success_count / fallback_used_count,
-            4,
-        )
-        if fallback_used_count
-        else 0.0,
-        "constraint_satisfaction_rate": round(
-            satisfied_result_count / total_result_count,
-            4,
-        )
-        if total_result_count
-        else 0.0,
-        "total_result_count": total_result_count,
-        "satisfied_result_count": satisfied_result_count,
     }
 
+    # ─── 保存 ───
     with open(OUTPUT_SUMMARY, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+        json.dump(rule_summary, f, ensure_ascii=False, indent=2)
 
     with open(OUTPUT_DETAILS, "w", encoding="utf-8") as f:
-        json.dump(details, f, ensure_ascii=False, indent=2)
+        json.dump(rule_summary["details"], f, ensure_ascii=False, indent=2)
 
-    print("\nDone.")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    print(f"\nSaved summary to: {OUTPUT_SUMMARY}")
-    print(f"Saved details to: {OUTPUT_DETAILS}")
+    with open(OUTPUT_COMPARISON, "w", encoding="utf-8") as f:
+        json.dump(comparison, f, ensure_ascii=False, indent=2)
+
+    print("\n=== Rule Agent ===")
+    print(json.dumps({k: v for k, v in rule_summary.items() if k != "details"}, ensure_ascii=False, indent=2))
+    print("\n=== LLM Agent ===")
+    print(json.dumps({k: v for k, v in llm_summary.items() if k != "details"}, ensure_ascii=False, indent=2))
+    print("\n=== Comparison (LLM - Rule) ===")
+    print(json.dumps(comparison["delta"], ensure_ascii=False, indent=2))
+
+    print(f"\nSaved to: {OUTPUT_SUMMARY}, {OUTPUT_DETAILS}, {OUTPUT_COMPARISON}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import time
+import re
 import logging
 
 
@@ -255,18 +256,26 @@ class RetrievalService:
                         "raw_bm25_score": raw_bm25_score,
                     }
                 else:
+                    # BM25 结果不在 Qdrant 中（数据不一致的罕见情况）
+                    # 用 text 提取尽可能多的元数据，避免后续过滤时因 None 被丢弃
                     text = item["text"]
                     title = self.extract_display_title(text)
+
+                    # 尝试从标题提取年份
+                    extracted_year = None
+                    year_match = re.search(r"\((\d{4})\)", title)
+                    if year_match:
+                        extracted_year = int(year_match.group(1))
 
                     merged[doc_id] = {
                         "id": doc_id,
                         "title": title,
                         "genres": item.get("category"),
                         "overview": None,
-                        "year": None,
-                        "vote_average": None,
-                        "vote_count": None,
-                        "popularity": None,
+                        "year": extracted_year,
+                        "vote_average": 0,    # 用 0 而非 None，避免被质量过滤误杀
+                        "vote_count": 0,
+                        "popularity": 0,
                         "directors": None,
                         "cast": None,
                         "keywords": None,

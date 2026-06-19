@@ -34,5 +34,5 @@ class LocalAgentUserRecommendRequest(BaseModel):
     prompt: str
 
 
-
-
+class LocalAgentRecommendRequest(BaseModel):
+    prompt: str

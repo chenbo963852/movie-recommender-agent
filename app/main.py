@@ -4,7 +4,6 @@ import logging
 import re
 
 from fastapi import FastAPI, Query, HTTPException
-from pydantic import BaseModel
 
 from app.services.bm25_service import BM25Service
 from app.services.embedding_service import EmbeddingService
@@ -16,7 +15,7 @@ from app.services.user_profile_service import UserProfileService
 from app.services.user_seen_movies_service import UserSeenMoviesService
 from app.services.intent_parser_service import IntentParserService
 from app.services.agent_recommendation_service import AgentRecommendationService
-from app.services.local_llm_service import LocalLLMService
+from app.services.llm_service import LLMService
 from app.services.recommendation_service import UserRecommendationService
 from app.evaluation import evaluate_recommendation, evaluate_batch_users
 from app.schemas import (
@@ -26,7 +25,9 @@ from app.schemas import (
     AgentRecommendRequest,
     AgentUserRecommendRequest,
     LocalAgentUserRecommendRequest,
+    LocalAgentRecommendRequest,
 )
+from config import llm_config
 
 app = FastAPI()
 logging.basicConfig(
@@ -44,7 +45,7 @@ movie_rating_stats_service = MovieRatingStatsService()
 user_profile_service = UserProfileService()
 user_seen_movies_service = UserSeenMoviesService()
 intent_parser_service = IntentParserService()
-local_llm_service = LocalLLMService()
+llm_service = LLMService(backend=llm_config.backend, config=llm_config.to_dict())
 
 retrieval_service = RetrievalService(
     embedding_service=embedding_service,
@@ -54,8 +55,9 @@ retrieval_service = RetrievalService(
 )
 
 agent_recommendation_service = AgentRecommendationService(
-    intent_parser_service=intent_parser_service,
+    llm_service=llm_service,
     retrieval_service=retrieval_service,
+    intent_parser_service=intent_parser_service,
     user_profile_service=user_profile_service,
     user_seen_movies_service=user_seen_movies_service,
 )
@@ -66,10 +68,6 @@ user_recommendation_service = UserRecommendationService(
     embedding_service=embedding_service,
     retrieval_service=retrieval_service,
 )
-
-
-class LocalAgentRecommendRequest(BaseModel):
-    prompt: str
 
 
 def load_documents_from_json():
@@ -117,7 +115,8 @@ def startup():
     ratings_service.load_ratings()
     print(f"Ratings loaded for {len(ratings_service.movie_stats)} movies.")
 
-    local_llm_service.load_model()
+    if llm_config.is_local:
+        llm_service._init_local_model()
 
 
 @app.get("/")
@@ -671,29 +670,43 @@ def user_recommend(
 
 @app.post("/agent/recommend")
 def agent_recommend(req: AgentRecommendRequest):
+    """LLM 驱动的 Agent 推荐——含真实 Agent 循环 + RAG 生成。"""
+    return agent_recommendation_service.recommend_llm(req.message)
+
+
+@app.post("/agent/recommend/rule")
+def agent_recommend_rule(req: AgentRecommendRequest):
+    """规则驱动的 Agent 推荐——保留原有硬编码回退逻辑，用于对比。"""
     return agent_recommendation_service.recommend(req.message)
 
 
 @app.post("/agent/user-recommend")
 def agent_user_recommend(req: AgentUserRecommendRequest):
-    return agent_recommendation_service.recommend_for_user(
+    """LLM 驱动的个性化 Agent 推荐。"""
+    return agent_recommendation_service.recommend_for_user_llm(
         user_id=req.user_id,
         message=req.message,
     )
 
 
 @app.get("/llm/test")
-def test_local_llm(prompt: str):
-    response = local_llm_service.chat(prompt)
+def test_llm(prompt: str):
+    """测试 LLM 连接（cloud 或 local）。"""
+    response = llm_service.chat([
+        {"role": "user", "content": prompt},
+    ])
     return {
+        "backend": llm_config.backend,
+        "model": llm_config.model if llm_config.is_cloud else llm_config.local_model_path,
         "prompt": prompt,
-        "response": response
+        "response": response,
     }
 
 
 @app.post("/agent/recommend/local")
 def local_agent_recommend(req: LocalAgentRecommendRequest):
-    params = local_llm_service.extract_search_params(req.prompt)
+    """直接传入 LLM 提取的参数进行推荐（不经过 Agent 循环）。"""
+    params = llm_service.extract_search_params(req.prompt)
     return agent_recommendation_service.recommend_with_parsed_intent(
         message=req.prompt,
         parsed_intent=params,
@@ -703,7 +716,8 @@ def local_agent_recommend(req: LocalAgentRecommendRequest):
 
 @app.post("/agent/recommend/local/user")
 def local_agent_user_recommend(req: LocalAgentUserRecommendRequest):
-    params = local_llm_service.extract_search_params(req.prompt)
+    """直接传入 LLM 提取的参数进行个性化推荐。"""
+    params = llm_service.extract_search_params(req.prompt)
     return agent_recommendation_service.recommend_for_user_with_parsed_intent(
         user_id=req.user_id,
         message=req.prompt,
